@@ -9,10 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.4]
 
-### Uncategorized
-
-- chore: remove js as fallback default ([#67](https://github.com/MetaMask/action-security-code-scanner/pull/67))
-
 ### Changed
 
 - Updated language detector to remove Javascript as fallback default language
