@@ -1,6 +1,6 @@
 {
   "name": "@metamask/language-detector",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Language detection and matrix generation for code scanning",
   "type": "module",
   "main": "src/index.js",
