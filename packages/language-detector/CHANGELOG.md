@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.4]
+
 ### Changed
 
 - Updated language detector to remove Javascript as fallback default language
@@ -40,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added support for autodetecting languages using Github API
 
-[Unreleased]: https://github.com/MetaMask/action-security-code-scanner/compare/v2.0.3...HEAD
+[Unreleased]: https://github.com/MetaMask/action-security-code-scanner/compare/v2.0.4...HEAD
+[2.0.4]: https://github.com/MetaMask/action-security-code-scanner/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/MetaMask/action-security-code-scanner/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/MetaMask/action-security-code-scanner/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/MetaMask/action-security-code-scanner/compare/v2.0.0...v2.0.1
