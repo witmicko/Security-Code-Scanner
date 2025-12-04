@@ -1,0 +1,156 @@
+name: Manual Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit-sha:
+        description: 'The commit SHA to release from (e.g., 256e888 or full SHA)'
+        required: true
+        type: string
+      dry-run:
+        description: 'Dry run - validate without publishing'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  check-permissions:
+    name: Check permissions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if user is in application-security team
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const org = 'MetaMask';
+            const team = 'application-security';
+            const actor = context.actor;
+
+            try {
+              const { data: membership } = await github.rest.teams.getMembershipForUserInOrg({
+                org: org,
+                team_slug: team,
+                username: actor,
+              });
+
+              if (membership.state === 'active') {
+                console.log(`✓ User ${actor} is a member of @${org}/${team}`);
+              } else {
+                core.setFailed(`✗ User ${actor} is not an active member of @${org}/${team}`);
+              }
+            } catch (error) {
+              if (error.status === 404) {
+                core.setFailed(`✗ User ${actor} is not a member of @${org}/${team}`);
+              } else {
+                core.setFailed(`Error checking team membership: ${error.message}`);
+              }
+            }
+
+  validate-commit:
+    needs: check-permissions
+    name: Validate commit
+    runs-on: ubuntu-latest
+    outputs:
+      FULL_SHA: ${{ steps.get-sha.outputs.FULL_SHA }}
+      PACKAGE_NAME: ${{ steps.package-info.outputs.PACKAGE_NAME }}
+      PACKAGE_VERSION: ${{ steps.package-info.outputs.PACKAGE_VERSION }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate and resolve commit SHA
+        id: get-sha
+        env:
+          INPUT_COMMIT_SHA: ${{ github.event.inputs.commit-sha }}
+        run: |
+          # Validate input matches SHA pattern (7-40 hex characters)
+          if ! echo "$INPUT_COMMIT_SHA" | grep -qE '^[0-9a-fA-F]{7,40}$'; then
+            echo "Error: Invalid commit SHA format. Must be 7-40 hexadecimal characters."
+            echo "Provided: $INPUT_COMMIT_SHA"
+            exit 1
+          fi
+
+          # Resolve to full SHA
+          FULL_SHA=$(git rev-parse "$INPUT_COMMIT_SHA" 2>&1)
+          EXIT_CODE=$?
+
+          if [ $EXIT_CODE -ne 0 ] || [ -z "$FULL_SHA" ]; then
+            echo "Error: Could not resolve commit SHA: $INPUT_COMMIT_SHA"
+            echo "$FULL_SHA"
+            exit 1
+          fi
+
+          # Validate resolved SHA is actually a commit
+          if ! git cat-file -e "$FULL_SHA^{commit}" 2>/dev/null; then
+            echo "Error: $FULL_SHA is not a valid commit"
+            exit 1
+          fi
+
+          echo "FULL_SHA=$FULL_SHA" >> "$GITHUB_OUTPUT"
+          echo "Resolved commit SHA: $FULL_SHA"
+      - name: Checkout specific commit
+        env:
+          COMMIT_SHA: ${{ steps.get-sha.outputs.FULL_SHA }}
+        run: git checkout "$COMMIT_SHA"
+      - name: Show commit details
+        env:
+          COMMIT_SHA: ${{ steps.get-sha.outputs.FULL_SHA }}
+        run: |
+          echo "Commit details:"
+          git log -1 --pretty=format:"Author: %an <%ae>%nDate: %ad%nSubject: %s%nBody: %b" "$COMMIT_SHA"
+      - name: Get package info
+        id: package-info
+        run: |
+          PACKAGE_NAME=$(jq -r '.name' package.json)
+          PACKAGE_VERSION=$(jq -r '.version' package.json)
+          echo "PACKAGE_NAME=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Package: $PACKAGE_NAME@$PACKAGE_VERSION"
+      - name: Check for existing release
+        env:
+          PACKAGE_VERSION: ${{ steps.package-info.outputs.PACKAGE_VERSION }}
+        run: |
+          TAG="v${PACKAGE_VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "⚠️  Warning: Tag $TAG already exists"
+            git log -1 --pretty=format:"Existing tag points to: %H%n" "$TAG"
+          else
+            echo "✓ Tag $TAG does not exist yet"
+          fi
+
+  dry-run-summary:
+    needs: validate-commit
+    if: github.event.inputs.dry-run == 'true'
+    name: Dry run summary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display dry run summary
+        env:
+          PACKAGE_NAME: ${{ needs.validate-commit.outputs.PACKAGE_NAME }}
+          PACKAGE_VERSION: ${{ needs.validate-commit.outputs.PACKAGE_VERSION }}
+          FULL_SHA: ${{ needs.validate-commit.outputs.FULL_SHA }}
+        run: |
+          echo "## 🔍 Dry Run Summary"
+          echo ""
+          echo "**Mode:** Dry run (no changes will be made)"
+          echo "**Package:** ${PACKAGE_NAME}@${PACKAGE_VERSION}"
+          echo "**Commit:** ${FULL_SHA}"
+          echo ""
+          echo "✓ All validation checks passed"
+          echo "ℹ️  To publish this release, run the workflow again with 'Dry run' unchecked"
+
+  publish-release:
+    needs: validate-commit
+    if: github.event.inputs.dry-run == 'false'
+    name: Publish release
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-release.yml
+    with:
+      commit-sha: ${{ needs.validate-commit.outputs.FULL_SHA }}
+      slack-icon-url: 'https://raw.githubusercontent.com/MetaMask/action-npm-publish/main/robo.png'
+      slack-subteam: 'S042S7RE4AE'
+      slack-username: 'MetaMask bot'
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

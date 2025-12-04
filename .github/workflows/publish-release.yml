@@ -15,6 +15,10 @@ on:
         required: false
         type: string
         default: 'MetaMask bot'
+      commit-sha:
+        required: false
+        type: string
+        description: 'Optional commit SHA to checkout for release'
     secrets:
       SLACK_WEBHOOK_URL:
         required: true
@@ -25,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha || github.sha }}
       - id: name-hash
         name: Get Slack name and hash
         shell: bash
@@ -74,7 +80,7 @@ jobs:
           # This is to guarantee that the most recent tag is fetched, which we
           # need for updating the shorthand major version tag.
           fetch-depth: 0
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.commit-sha || github.sha }}
       - name: Publish release
         uses: MetaMask/action-publish-release@v3
         id: publish-release
